@@ -34,6 +34,39 @@ export default function AdminDashboard() {
     }
   }, [user, authLoading, navigate]);
 
+  // Real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    // Listen to all changes on the appointments table
+    const channel = supabase
+      .channel('admin-dashboard-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        (payload) => {
+          // When anything changes, re-fetch all stats and recent appointments
+          toast.info("Dashboard updated with new activity.");
+          fetchStats();
+          fetchRecentAppointments();
+        }
+      )
+      .on( // Also listen to changes in user roles
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roles' },
+        (payload) => {
+          toast.info("Dashboard updated with new user data.");
+          fetchStats();
+        }
+      )
+      .subscribe();
+
+    // Clean up subscription on exit
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const checkAdminRole = async () => {
     const { data: userRole } = await supabase
       .from("user_roles")
@@ -47,42 +80,48 @@ export default function AdminDashboard() {
       return;
     }
 
-    fetchStats();
-    fetchRecentAppointments();
+    // Initial data fetch - now we await them
+    await fetchStats();
+    await fetchRecentAppointments();
+    setLoading(false);
   };
 
   const fetchStats = async () => {
     try {
-      const { count: totalUsers } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true });
-
+      // Total Faculty
       const { count: totalFaculty } = await supabase
         .from("user_roles")
         .select("*", { count: "exact", head: true })
         .eq("role", "faculty");
 
+      // Total Students
       const { count: totalStudents } = await supabase
         .from("user_roles")
         .select("*", { count: "exact", head: true })
         .eq("role", "student");
 
+      // Total Appointments
       const { count: totalAppointments } = await supabase
         .from("appointments")
         .select("*", { count: "exact", head: true });
 
+      // Confirmed Appointments
       const { count: confirmedAppointments } = await supabase
         .from("appointments")
         .select("*", { count: "exact", head: true })
         .eq("status", "confirmed");
 
+      // Cancelled Appointments
       const { count: cancelledAppointments } = await supabase
         .from("appointments")
         .select("*", { count: "exact", head: true })
         .eq("status", "cancelled");
 
+      // *** FIX: Calculate totalUsers as the sum of faculty and students ***
+      const totalUsers = (totalFaculty || 0) + (totalStudents || 0);
+
       setStats({
-        totalUsers: totalUsers || 0,
+        totalUsers: totalUsers, // <-- This is now the correct sum
         totalFaculty: totalFaculty || 0,
         totalStudents: totalStudents || 0,
         totalAppointments: totalAppointments || 0,
@@ -91,8 +130,6 @@ export default function AdminDashboard() {
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -226,7 +263,11 @@ export default function AdminDashboard() {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={apt.status === "confirmed" ? "default" : "secondary"}
+                          variant={
+                            apt.status === "confirmed" ? "default" 
+                            : apt.status === "cancelled" ? "destructive" 
+                            : "secondary"
+                          }
                         >
                           {apt.status}
                         </Badge>
