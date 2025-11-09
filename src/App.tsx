@@ -8,6 +8,10 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import StudentDashboard from "./pages/StudentDashboard";
 import FacultyDashboard from "./pages/FacultyDashboard";
+import FacultyProfile from "./pages/FacultyProfile";
+import AvailabilityManagement from "./pages/AvailabilityManagement";
+import FacultySearch from "./pages/FacultySearch";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +28,10 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/faculty/dashboard" element={<FacultyDashboard />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/faculty/profile" element={<FacultyProfile />} />
+            <Route path="/faculty/availability" element={<AvailabilityManagement />} />
+            <Route path="/faculty/search" element={<FacultySearch />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

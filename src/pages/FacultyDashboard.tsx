@@ -1,141 +1,269 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Calendar, LogOut, Clock, Settings, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, User, Settings, LogOut, Loader2, Clock } from "lucide-react";
+import { format } from "date-fns";
 
-const FacultyDashboard = () => {
-  const { user, signOut } = useAuth();
+export default function FacultyDashboard() {
+  const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [facultyProfile, setFacultyProfile] = useState<any>(null);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       navigate("/auth");
       return;
     }
 
-    const fetchProfile = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      
-      setProfile(data);
-      setLoading(false);
+    if (user) {
+      fetchProfile();
+      fetchFacultyProfile();
+      fetchAppointments();
+    }
+  }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('faculty-appointments')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments',
+          filter: `faculty_id=eq.${user.id}`
+        },
+        () => fetchAppointments()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [user]);
 
-    fetchProfile();
-  }, [user, navigate]);
+  const fetchProfile = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user!.id)
+      .single();
 
-  if (loading) {
+    setProfile(data);
+  };
+
+  const fetchFacultyProfile = async () => {
+    const { data } = await supabase
+      .from("faculty_profiles")
+      .select("*")
+      .eq("user_id", user!.id)
+      .maybeSingle();
+
+    setFacultyProfile(data);
+    setLoadingData(false);
+  };
+
+  const fetchAppointments = async () => {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select(`
+        *,
+        availability_slots(start_time, end_time),
+        student:profiles!appointments_student_id_fkey(full_name, email)
+      `)
+      .eq("faculty_id", user!.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching appointments:", error);
+    } else {
+      setAppointments(data || []);
+    }
+  };
+
+  if (loading || loadingData) {
     return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-bold text-foreground">BookMyFaculty</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                Welcome, {profile?.full_name}
-              </span>
-              <Button variant="outline" size="sm" onClick={signOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
+  if (!facultyProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background p-8">
+        <div className="max-w-2xl mx-auto">
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Your Profile</CardTitle>
+              <CardDescription>
+                Please set up your faculty profile to start accepting appointments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => navigate("/faculty/profile")}>
+                Set Up Profile
               </Button>
-            </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const upcomingAppointments = appointments.filter(
+    (apt) => apt.status === "confirmed" && new Date(apt.availability_slots?.start_time) > new Date()
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Faculty Dashboard</h1>
+            <p className="text-muted-foreground mt-1">Welcome back, {profile?.full_name}!</p>
           </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Faculty Dashboard</h1>
-          <p className="text-muted-foreground">
-            Manage your availability and appointments
-          </p>
+          <Button variant="outline" onClick={signOut}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Manage Availability */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+        <div className="grid gap-6 md:grid-cols-3">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate("/faculty/profile")}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                <CardTitle>My Profile</CardTitle>
+              </div>
+              <CardDescription>Manage your faculty information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" className="w-full">
+                <Settings className="h-4 w-4 mr-2" />
+                Edit Profile
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate("/faculty/availability")}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                <CardTitle>Availability</CardTitle>
+              </div>
+              <CardDescription>Set your consultation time slots</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full">
+                Manage Slots
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-primary" />
+                <CardTitle>Upcoming</CardTitle>
               </div>
-              <h2 className="text-xl font-semibold text-card-foreground">
-                Availability
-              </h2>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Set and manage your consultation time slots
-            </p>
-            <Button className="w-full">Manage Slots</Button>
-          </Card>
-
-          {/* View Appointments */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold text-card-foreground">
-                Appointments
-              </h2>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              View and manage student bookings
-            </p>
-            <Button variant="outline" className="w-full">View All</Button>
-          </Card>
-
-          {/* Profile Settings */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Settings className="h-5 w-5 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold text-card-foreground">
-                Profile
-              </h2>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Update your profile and contact details
-            </p>
-            <Button variant="outline" className="w-full">Edit Profile</Button>
+              <CardDescription>Your scheduled appointments</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{upcomingAppointments.length}</div>
+            </CardContent>
           </Card>
         </div>
 
-        {/* Today's Schedule */}
-        <Card className="mt-6 p-6">
-          <h2 className="text-2xl font-semibold text-card-foreground mb-4">
-            Today's Schedule
-          </h2>
-          <div className="text-center py-8 text-muted-foreground">
-            <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No appointments scheduled for today</p>
-            <p className="text-sm mt-2">Set up your availability to start receiving bookings</p>
-          </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Appointments</CardTitle>
+            <CardDescription>View and manage student consultations</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {appointments.length === 0 ? (
+              <div className="text-center py-12">
+                <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No appointments yet</p>
+                <Button className="mt-4" onClick={() => navigate("/faculty/availability")}>
+                  Set Your Availability
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {upcomingAppointments.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-3">Upcoming Appointments</h3>
+                    <div className="space-y-3">
+                      {upcomingAppointments.map((apt) => (
+                        <Card key={apt.id}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <p className="font-medium">{apt.student?.full_name}</p>
+                                <p className="text-sm text-muted-foreground">{apt.student?.email}</p>
+                                {apt.availability_slots && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Calendar className="h-4 w-4" />
+                                    {format(new Date(apt.availability_slots.start_time), "PPP 'at' p")}
+                                  </div>
+                                )}
+                              </div>
+                              <Badge variant="default">Confirmed</Badge>
+                            </div>
+                            {apt.student_notes && (
+                              <div className="mt-3 p-2 bg-muted rounded-md">
+                                <p className="text-sm"><strong>Student Notes:</strong> {apt.student_notes}</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {appointments.filter(a => a.status === "cancelled" || new Date(a.availability_slots?.start_time) <= new Date()).length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-3">Past & Cancelled</h3>
+                    <div className="space-y-3">
+                      {appointments
+                        .filter(a => a.status === "cancelled" || new Date(a.availability_slots?.start_time) <= new Date())
+                        .map((apt) => (
+                          <Card key={apt.id} className="opacity-75">
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <p className="font-medium">{apt.student?.full_name}</p>
+                                  {apt.availability_slots && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                      <Calendar className="h-4 w-4" />
+                                      {format(new Date(apt.availability_slots.start_time), "PPP 'at' p")}
+                                    </div>
+                                  )}
+                                </div>
+                                <Badge variant="secondary">{apt.status}</Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
         </Card>
-      </main>
+      </div>
     </div>
   );
-};
-
-export default FacultyDashboard;
+}

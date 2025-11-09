@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -52,16 +52,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       toast.success("Welcome back!");
       
-      // Redirect based on role
-      const { data: profile } = await supabase
-        .from("profiles")
+      // Redirect based on role from user_roles table
+      const { data: userRole } = await supabase
+        .from("user_roles")
         .select("role")
-        .eq("id", user?.id)
+        .eq("user_id", authData.user.id)
         .single();
 
-      if (profile?.role === "faculty") {
+      if (userRole?.role === "faculty") {
         navigate("/faculty/dashboard");
-      } else if (profile?.role === "admin") {
+      } else if (userRole?.role === "admin") {
         navigate("/admin/dashboard");
       } else {
         navigate("/student/dashboard");
