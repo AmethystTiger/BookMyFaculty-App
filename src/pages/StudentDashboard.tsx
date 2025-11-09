@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Search, LogOut, Loader2, Clock } from "lucide-react";
@@ -31,16 +37,16 @@ export default function StudentDashboard() {
     if (!user) return;
 
     const channel = supabase
-      .channel('student-appointments')
+      .channel("student-appointments")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'appointments',
-          filter: `student_id=eq.${user.id}`
+          event: "*",
+          schema: "public",
+          table: "appointments",
+          filter: `student_id=eq.${user.id}`,
         },
-        () => fetchAppointments()
+        () => fetchAppointments(),
       )
       .subscribe();
 
@@ -62,12 +68,17 @@ export default function StudentDashboard() {
   const fetchAppointments = async () => {
     const { data, error } = await supabase
       .from("appointments")
-      .select(`
+      .select(
+        `
         *,
         availability_slots(start_time, end_time),
-        faculty:profiles!appointments_faculty_id_fkey(full_name, email),
-        faculty_profile:faculty_profiles!appointments_faculty_id_fkey(department, chamber_location)
-      `)
+        faculty:profiles!faculty_id(
+          full_name, 
+          email,
+          faculty_profiles(department, chamber_location)
+        )
+      `,
+      )
       .eq("student_id", user!.id)
       .order("created_at", { ascending: false });
 
@@ -100,12 +111,20 @@ export default function StudentDashboard() {
     );
   }
 
+  const now = new Date();
+
   const upcomingAppointments = appointments.filter(
-    (apt) => apt.status === "confirmed" && new Date(apt.availability_slots?.start_time) > new Date()
+    // Use now to ensure the time is consistent for both upcoming and past filters
+    (apt) =>
+      apt.status === "confirmed" &&
+      new Date(apt.availability_slots?.end_time) > now,
   );
 
   const pastAppointments = appointments.filter(
-    (apt) => apt.status === "confirmed" && new Date(apt.availability_slots?.start_time) <= new Date()
+    // Past appointments are those that have ended.
+    (apt) =>
+      apt.status === "confirmed" &&
+      new Date(apt.availability_slots?.end_time) <= now,
   );
 
   return (
@@ -114,7 +133,9 @@ export default function StudentDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Student Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Welcome back, {profile?.full_name}!</p>
+            <p className="text-muted-foreground mt-1">
+              Welcome back, {profile?.full_name}!
+            </p>
           </div>
           <Button variant="outline" onClick={signOut}>
             <LogOut className="h-4 w-4 mr-2" />
@@ -123,18 +144,21 @@ export default function StudentDashboard() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate("/faculty/search")}>
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate("/faculty/search")}
+          >
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Search className="h-5 w-5 text-primary" />
                 <CardTitle>Search Faculty</CardTitle>
               </div>
-              <CardDescription>Find and book appointments with faculty members</CardDescription>
+              <CardDescription>
+                Find and book appointments with faculty members
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full">
-                Browse Faculty
-              </Button>
+              <Button className="w-full">Browse Faculty</Button>
             </CardContent>
           </Card>
 
@@ -144,10 +168,14 @@ export default function StudentDashboard() {
                 <Calendar className="h-5 w-5 text-primary" />
                 <CardTitle>Upcoming Appointments</CardTitle>
               </div>
-              <CardDescription>You have {upcomingAppointments.length} upcoming consultations</CardDescription>
+              <CardDescription>
+                You have {upcomingAppointments.length} upcoming consultations
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{upcomingAppointments.length}</div>
+              <div className="text-2xl font-bold">
+                {upcomingAppointments.length}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -155,14 +183,19 @@ export default function StudentDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>My Appointments</CardTitle>
-            <CardDescription>View and manage your booked consultation slots</CardDescription>
+            <CardDescription>
+              View and manage your booked consultation slots
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {appointments.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No appointments yet</p>
-                <Button className="mt-4" onClick={() => navigate("/faculty/search")}>
+                <Button
+                  className="mt-4"
+                  onClick={() => navigate("/faculty/search")}
+                >
                   Book Your First Appointment
                 </Button>
               </div>
@@ -177,19 +210,27 @@ export default function StudentDashboard() {
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
                               <div className="space-y-1">
-                                <p className="font-medium">{apt.faculty?.full_name}</p>
+                                <p className="font-medium">
+                                  {apt.faculty?.full_name}
+                                </p>
                                 <p className="text-sm text-muted-foreground">
-                                  {apt.faculty_profile?.department}
+                                  {apt.faculty?.faculty_profiles?.[0]?.department}
                                 </p>
                                 {apt.availability_slots && (
                                   <div className="flex items-center gap-2 text-sm">
                                     <Calendar className="h-4 w-4" />
-                                    {format(new Date(apt.availability_slots.start_time), "PPP 'at' p")}
+                                    {format(
+                                      new Date(
+                                        apt.availability_slots.start_time,
+                                      ),
+                                      "PPP 'at' p",
+                                    )}
                                   </div>
                                 )}
-                                {apt.faculty_profile?.chamber_location && (
+                                {apt.faculty?.faculty_profiles?.[0]?.chamber_location && (
                                   <p className="text-sm text-muted-foreground">
-                                    Location: {apt.faculty_profile.chamber_location}
+                                    Location:{" "}
+                                    {apt.faculty.faculty_profiles[0].chamber_location}
                                   </p>
                                 )}
                               </div>
@@ -206,7 +247,9 @@ export default function StudentDashboard() {
                             </div>
                             {apt.student_notes && (
                               <div className="mt-3 p-2 bg-muted rounded-md">
-                                <p className="text-sm text-muted-foreground">Notes: {apt.student_notes}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Notes: {apt.student_notes}
+                                </p>
                               </div>
                             )}
                           </CardContent>
@@ -225,14 +268,21 @@ export default function StudentDashboard() {
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
                               <div className="space-y-1">
-                                <p className="font-medium">{apt.faculty?.full_name}</p>
+                                <p className="font-medium">
+                                  {apt.faculty?.full_name}
+                                </p>
                                 <p className="text-sm text-muted-foreground">
-                                  {apt.faculty_profile?.department}
+                                  {apt.faculty?.faculty_profiles?.[0]?.department}
                                 </p>
                                 {apt.availability_slots && (
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Calendar className="h-4 w-4" />
-                                    {format(new Date(apt.availability_slots.start_time), "PPP 'at' p")}
+                                    {format(
+                                      new Date(
+                                        apt.availability_slots.start_time,
+                                      ),
+                                      "PPP 'at' p",
+                                    )}
                                   </div>
                                 )}
                               </div>

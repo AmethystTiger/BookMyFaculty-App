@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0",
     port: 5000,
+    allowedHosts: [
+      '646a6045-38fa-46f8-8916-1ff964b67a4d-00-1rajqx9b29n2h.janeway.replit.dev',
+      'localhost',
+      '127.0.0.1',
+    ],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
