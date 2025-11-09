@@ -101,97 +101,7 @@ CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(is_read);
 
 -- ============================================================================
--- PART 3: ROW LEVEL SECURITY (RLS) POLICIES
--- ============================================================================
-
--- Enable RLS on all tables
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE faculty_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE availability_slots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-
--- Profiles policies
-CREATE POLICY "Users can view all profiles"
-  ON profiles FOR SELECT
-  USING (true);
-
-CREATE POLICY "Users can update own profile"
-  ON profiles FOR UPDATE
-  USING (auth.uid() = id);
-
-CREATE POLICY "Users can insert own profile"
-  ON profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
-
--- User roles policies
-CREATE POLICY "Users can view own role"
-  ON user_roles
-  FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Only admins can insert roles"
-  ON user_roles
-  FOR INSERT
-  WITH CHECK (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Only admins can update roles"
-  ON user_roles
-  FOR UPDATE
-  USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Only admins can delete roles"
-  ON user_roles
-  FOR DELETE
-  USING (public.has_role(auth.uid(), 'admin'));
-
--- Faculty profiles policies
-CREATE POLICY "Anyone can view faculty profiles"
-  ON faculty_profiles FOR SELECT
-  USING (true);
-
-CREATE POLICY "Faculty can update own profile"
-  ON faculty_profiles FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Faculty can insert own profile"
-  ON faculty_profiles FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- Availability slots policies
-CREATE POLICY "Anyone can view available slots"
-  ON availability_slots FOR SELECT
-  USING (true);
-
-CREATE POLICY "Faculty can manage own slots"
-  ON availability_slots FOR ALL
-  USING (auth.uid() = faculty_id);
-
--- Appointments policies
-CREATE POLICY "Students can view own appointments"
-  ON appointments FOR SELECT
-  USING (auth.uid() = student_id OR auth.uid() = faculty_id);
-
-CREATE POLICY "Students can create appointments"
-  ON appointments FOR INSERT
-  WITH CHECK (auth.uid() = student_id);
-
-CREATE POLICY "Students and faculty can update appointments"
-  ON appointments FOR UPDATE
-  USING (auth.uid() = student_id OR auth.uid() = faculty_id);
-
--- Notifications policies
-CREATE POLICY "Users can view own notifications"
-  ON notifications FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own notifications"
-  ON notifications FOR UPDATE
-  USING (auth.uid() = user_id);
-
--- ============================================================================
--- PART 4: FUNCTIONS & TRIGGERS
+-- PART 3: FUNCTIONS & TRIGGERS (BEFORE RLS POLICIES!)
 -- ============================================================================
 
 -- Helper function to check if user has a role
@@ -345,6 +255,96 @@ CREATE TRIGGER update_appointments_updated_at
   BEFORE UPDATE ON appointments
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at();
+
+-- ============================================================================
+-- PART 4: ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================================================================
+
+-- Enable RLS on all tables
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE faculty_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE availability_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Users can view all profiles"
+  ON profiles FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile"
+  ON profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+-- User roles policies
+CREATE POLICY "Users can view own role"
+  ON user_roles
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Only admins can insert roles"
+  ON user_roles
+  FOR INSERT
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Only admins can update roles"
+  ON user_roles
+  FOR UPDATE
+  USING (public.has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Only admins can delete roles"
+  ON user_roles
+  FOR DELETE
+  USING (public.has_role(auth.uid(), 'admin'));
+
+-- Faculty profiles policies
+CREATE POLICY "Anyone can view faculty profiles"
+  ON faculty_profiles FOR SELECT
+  USING (true);
+
+CREATE POLICY "Faculty can update own profile"
+  ON faculty_profiles FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Faculty can insert own profile"
+  ON faculty_profiles FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Availability slots policies
+CREATE POLICY "Anyone can view available slots"
+  ON availability_slots FOR SELECT
+  USING (true);
+
+CREATE POLICY "Faculty can manage own slots"
+  ON availability_slots FOR ALL
+  USING (auth.uid() = faculty_id);
+
+-- Appointments policies
+CREATE POLICY "Students can view own appointments"
+  ON appointments FOR SELECT
+  USING (auth.uid() = student_id OR auth.uid() = faculty_id);
+
+CREATE POLICY "Students can create appointments"
+  ON appointments FOR INSERT
+  WITH CHECK (auth.uid() = student_id);
+
+CREATE POLICY "Students and faculty can update appointments"
+  ON appointments FOR UPDATE
+  USING (auth.uid() = student_id OR auth.uid() = faculty_id);
+
+-- Notifications policies
+CREATE POLICY "Users can view own notifications"
+  ON notifications FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own notifications"
+  ON notifications FOR UPDATE
+  USING (auth.uid() = user_id);
 
 -- ============================================================================
 -- PART 5: REALTIME SUBSCRIPTIONS
